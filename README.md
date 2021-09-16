@@ -4,7 +4,7 @@ This repository includes the analysis code used for text and data mining in the 
 
 ## [See a live version of the R notebook here!](https://chiarelliandrea.github.io/KE-PRRO/)
 
-This deposit includes the text and data mining code used in the context of the [Knowledge Exchange activity on publishing reproducible research outputs (KE-PRRO)](https://knowledge-exchange.info/event/publishing-reproducible-research-output). It is also available via [Zenodo](https://doi.org/10.5281/zenodo.5511977) for citation and long term preservation. 
+This deposit includes the text and data mining code used in the context of the [Knowledge Exchange activity on publishing reproducible research outputs (KE-PRRO)](https://knowledge-exchange.info/event/publishing-reproducible-research-output). It is also available via [Zenodo](https://doi.org/10.5281/zenodo.5512019) for citation and long term preservation. 
 
 Three files are available: 
 * the R Studio source code; 
