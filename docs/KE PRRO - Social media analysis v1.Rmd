@@ -1,0 +1,458 @@
+---
+title: "KE PRRO - Social media analysis"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+The Knowledge Exchange task and finish group defined a range of Twitter hashtags to be followed throughout the project [Publishing reproducible research output](https://www.knowledge-exchange.info/event/publishing-reproducible-research-output). These hashtags were harvested via the rtweet libray and the Twitter API and then saved in csv format. Up to 7,500 tweets were allowed for each hashtag, and this number was never reached over the course of the monitoring period. The hashtags considered were:
+
+* #Reproducibility
+* #Replicability
+* #ReproducibleScience
+* #ResearchReproducibility
+* #ReproducibleResearch
+* #ResearchCredibility
+* #GoodResearchPractices
+* #RegisteredReports
+* #GoodScience
+* #ResearchCompendium (from 23/11 onwards)
+* #ResearchCompendia (from 23/11 onwards)
+* #ReproducibilityCrisis (from 23/11 onwards)
+* #ReplicabilityCrisis (from 23/11 onwards)
+* #ReplicationCrisis (from 23/11 onwards)
+* #TuringWay (from 23/11 onwards)
+
+Data was harvested on Mondays, starting from 09/11/2020. Please note that Twitter's Terms of Service do not allow the sharing of full data, so only Tweet ids are available as part of this deposit.
+
+# Software environment
+
+* R version 4.1.0 (2021-05-18)
+* Platform: x86_64-w64-mingw32/x64 (64-bit)
+* Running under: Windows 10 x64 (build 19042)
+
+# Library versions
+* data.table 1.14.0
+* dplyr 1.0.6
+* ggplot2 3.3.4
+* networkD3 0.4
+* purrr 0.3.4
+* RColorBrewer 1.1.2
+* readr 1.4.0
+* rmarkdown 2.11
+* rtweet 0.7.0
+* SnowballC 0.7.0
+* stringr 1.4.0
+* tidyverse 1.3.1
+* tm 0.7.8
+* wordcloud 2.6
+
+# Hardware
+
+* Device: IdeaCentre A540-24ICB
+* Processor: Intel(R) Core(TM) i5-9400T CPU @ 1.80GHz   1.80 GHz
+* Installer RAM: 8.00 GB
+* System type: 64-bit operating system, x64-based processor
+
+# Section 1 - Libraries
+
+```{r results = FALSE, warning = FALSE}
+
+library(data.table)
+library(dplyr)
+options(dplyr.summarise.inform = FALSE)
+library(ggplot2)
+library(networkD3)
+library(purrr)
+library(RColorBrewer)
+library(readr)
+library(rmarkdown)
+library(rtweet)
+library(SnowballC)
+library(stringr)
+library(tidyverse)
+library(tm)
+library(wordcloud)
+```
+
+# Section 2 - Data import
+
+The csv data in different harvested files is imported into a single dataset and deduplicated by Tweet id.
+
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = "C:\\Users\\Andrea Chiarelli\\Research Consulting\\Rob Johnson - Team Folder\\Projects\\2020 - KE Reproducible Research\\06 Outputs\\5. Social media analysis (GDPR)\\Data")
+```
+
+
+```{r results='hide'}
+
+# Clear the environment (RStudio)
+rm(list = ls())
+
+# This reads any number of Twitter .csv datasets harvested via rtweet.
+tbl <-
+  list.files(pattern = "*.csv") %>% 
+  map_df(~read_csv(., col_types = cols(.default = "c")))
+
+# The tweets are de-duplicated by status id: the datasets downloaded may overlap, for example in cases where people used more than one of the hashtags monitored.
+Twitter_data <- tbl[!duplicated(tbl$status_id),] 
+```
+
+# Section 3 - Relevance checks
+
+Accounts that DO NOT include the words below in their description are likely to be irrelevant or invalid. They might have used the hashtags monitored in a different context that is not appropriate to this analysis. This approach is an approximation and will not be 100% accurate (e.g. if someone's profile description is blank). However, without filtering we would be very likely to consider irrelevant accounts and tweets. The below list of words has been developed by reviewing a random set of twitter accounts gathered in the dataset and enriched via personal knowledge of the sector.
+
+```{r results = FALSE, warning = FALSE}
+
+account_description_validation <- c('academia', 'academic', 'academics', 'analysis group', 'article', 'articles', 'assistant prof', 'assistant professor', 'associate prof', 'associate professor', 'associate director', 'biology', 'biomedical', 'book', 'ciencias', 'clinical trial', 'clinical trials', 'college', 'consortium', 'copyright', 'develop', 'digital object', 'director of', 'discover', 'doctoral', 'doi', 'editor', 'Editor-in-Chief', 'evidence', 'evidence base', 'evidencebased', 'head of', 'higher education', 'highered', 'humanities', 'information science', 'information sciences', 'institute', 'institutes', 'institution', 'institutions', 'interdisciplinary', 'journal', 'journals', 'learning', 'lecturer', 'librarian', 'librarians', 'libraries', 'library', 'licence', 'license', 'licensing', 'LIS', 'manuscript', 'manuscripts', 'medicine', 'metrics', 'modelling', 'museum', 'open access', 'open data', 'open knowledge', 'open research', 'open scholarship', 'paper', 'papers', 'peer review', 'peer reviewed', 'peer-review', 'peer-reviewed', 'ph.d. candidate', 'PhD', 'PhD candidate', 'postdoc', 'post-doc', 'preprint', 'pre-print', 'preprints', 'pre-prints', 'press', 'principal investigator', 'prof', 'prof.', 'professor', 'public domain', 'publication', 'publish', 'publisher', 'publishing', 'recherche', 'recherches', 'relationship between', 'research', 'research data', 'researcher', 'scholar', 'scholarly', 'scholarly communication', 'school', 'scicomm', 'science', 'sciences', 'scientific', 'scientist', 'scientists', 'society of', 'student', 'teacher', 'teaching', 'universities', 'university')
+account_description_validation_string <- paste(account_description_validation, collapse="|")
+
+# Accounts are marked as "Keep" or "Discard" based on the above list of words.
+Twitter_data$relevance_check <- ifelse(grepl(account_description_validation_string, Twitter_data$description, ignore.case = TRUE), "Keep", "Discard")
+
+# Only the accounts marked as "Keep" are taken forward.
+Twitter_data <- Twitter_data[Twitter_data$relevance_check == 'Keep',] 
+```
+
+# Section 4 - Data cleaning
+
+The text of the tweets is cleaned from odd characters and URLs using regex.
+
+```{r warning = FALSE}
+
+# Remove Unicode format and other textual oddities.
+Twitter_data$text <- str_replace_all(Twitter_data$text,"\\<U[^\\>]*\\>"," ")
+Twitter_data$text <- str_replace_all(Twitter_data$text,"\r\n"," ")
+Twitter_data$text <- str_replace_all(Twitter_data$text,"&amp;"," ")
+
+# Create a new column to save the original text before any further cleaning - this is just a backup.
+Twitter_data$Original_Tweet_Backup <- Twitter_data$text
+
+# Continue cleaning, removing hashtags, mentions and "RT". Note that hashtags are saved in a dedicated column so this is just removing them from the body of the tweet.
+Twitter_data$text <- str_replace_all(Twitter_data$text,"^RT:? "," ")
+Twitter_data$text <- str_replace_all(Twitter_data$text,"@[[:alnum:]]+"," ")
+Twitter_data$text <- str_replace_all(Twitter_data$text,"#[[:alnum:]]+"," ")
+Twitter_data$text <- str_replace_all(Twitter_data$text,"http\\S+\\s*"," ")
+```
+
+# Section 5 - Overview of posting times
+
+A chart of tweets by date is created.
+
+```{r warning = FALSE}
+
+ts_plot(Twitter_data, "hours") +
+  labs(x = NULL, y = NULL,
+       title = "Frequency of tweets vs time",
+       subtitle = paste0(format(min(Twitter_data$created_at)), " to ", format(max(Twitter_data$created_at))),
+       caption = "Data collected from Twitter's API (rtweet)") +
+  theme_minimal()
+```
+
+# Section 6 - Analysis of hashtags
+
+The hashtags harvested are analysed and shown as a word cloud and as a table.
+
+Note: Some of the tweets, even if they include the hashtags considered and were harvested as a result, do not include the hashtags in the dedicated "hashtags" column of Twitter_data. as a result, some of the tweets in the dataset do not contribute to the below calculations.
+
+```{r warning = FALSE}
+
+hashtags_vector <- Twitter_data$hashtags 
+
+split_hashtags <- str_split_fixed(hashtags_vector, " ", 100) # This splits the hashtags column using the space separator. "100" allows room for 100 columns, just in case.
+split_hashtags_single_column <- stack(data.frame(split_hashtags))
+split_hashtags_single_column <- data.frame(split_hashtags_single_column$values)
+
+split_hashtags_single_column <- mutate_all(split_hashtags_single_column, list(tolower)) # Converting to lowercase is useful because people might use "OpenAccess", "openaccess", "Openaccess", etc.
+
+# The line below gets rid of rows that are equal to #openaccess, as this will simply be a huge word in the middle of a word cloud.
+# You should replace "openaccess" with any other words relevant to you, or simply comment the next line.
+split_hashtags_single_column <- split_hashtags_single_column[split_hashtags_single_column != "openaccess", ] 
+
+split_hashtags_single_column <- data.frame(split_hashtags_single_column)
+split_hashtags_single_column_clean <- split_hashtags_single_column[split_hashtags_single_column != "", ] # This gets rid of rows that are blank
+
+wordcloud(split_hashtags_single_column_clean, min.freq=30, random.order=FALSE, colors=brewer.pal(9, 'Reds')[4:9])
+
+# If you want the word cloud in a table:
+split_hashtags_single_column_clean <- as.data.frame(split_hashtags_single_column_clean)
+names(split_hashtags_single_column_clean)[1] <- 'hashtag'
+
+split_hashtags_single_column_clean <- split_hashtags_single_column_clean %>%  
+  group_by(hashtag) %>%
+  summarise(weight = n()) %>% 
+  ungroup()
+
+split_hashtags_single_column_clean <- split_hashtags_single_column_clean[order(-split_hashtags_single_column_clean$weight), ]
+
+paged_table(head(split_hashtags_single_column_clean, 50))
+```
+
+# Section 7 - Analysis of mentions
+
+Mentions are analysed to identify the most mentioned accounts. Results are shown in a word cloud and a table.
+
+```{r warning = FALSE}
+
+# Exclude retweets, because they are considered as mentions in the data. If you retweet someone, the API considers that as you mentioning them.
+Twitter_data_no_retweets <- Twitter_data[Twitter_data$is_retweet == 'FALSE',]
+mentions_vector <- Twitter_data_no_retweets$mentions_screen_name 
+
+# Split the mentions column using the space separator. "100" allows room for 100 columns, just in case (note that this is not possible with Twitter's character limit!).
+split_mentions <- str_split_fixed(mentions_vector, " ", 100) 
+split_mentions_single_column <- stack(data.frame(split_mentions))
+split_mentions_single_column <- data.frame(split_mentions_single_column$values)
+
+# Get rid of rows that are blank
+split_mentions_single_column_clean <- split_mentions_single_column[split_mentions_single_column != "", ] 
+
+wordcloud(split_mentions_single_column_clean, min.freq=5, random.order=FALSE, colors=brewer.pal(9, 'Reds')[4:9])
+
+# If you want the word cloud in a table:
+split_mentions_single_column_clean <- as.data.frame(split_mentions_single_column_clean)
+names(split_mentions_single_column_clean)[1] <- 'account'
+
+split_mentions_single_column_clean <- split_mentions_single_column_clean %>%  
+  group_by(account) %>%
+  summarise(weight = n()) %>% 
+  ungroup()
+
+split_mentions_single_column_clean <- split_mentions_single_column_clean[order(-split_mentions_single_column_clean$weight), ]
+
+paged_table(head(split_mentions_single_column_clean, 50))
+```
+
+# Section 8 - Analysis of links shared
+
+Links shared in the tweets harvested are shown as a table, to identify literature sources and any relevant events for inclusion in the study.
+
+```{r warning = FALSE}
+
+top_urls <- Twitter_data[, c("urls_expanded_url")]
+top_urls <- top_urls[complete.cases(top_urls), ] # This gets rid of rows with missing values
+
+top_urls <- top_urls %>%  
+  group_by(urls_expanded_url) %>%
+  summarise(count = n()) %>% 
+  ungroup()
+
+top_urls <- top_urls[order(-top_urls$count),]
+
+paged_table(head(top_urls, 50))
+```
+
+# Section 9 - Analysis of most retweeted tweets
+
+The most retweeted tweets are reviewed to see if any key events or discussions should be reflected in the study. The results are shown in a table.
+
+```{r warning = FALSE}
+
+# I used the Original_Tweet_Backup column I've defined above. 
+# This is because the original "text" column has been stripped of hashtags, mentions, links, etc.
+top_tweets <- Twitter_data[, c("screen_name", "Original_Tweet_Backup", "retweet_count", "status_url")]
+
+# This deduplicates the dataset by tweet text. I do this as otherwise I'd get 
+# lots of duplicated occurrences (i.e. people retweeting the same popular tweet)
+top_tweets <- top_tweets[!duplicated(top_tweets$Original_Tweet_Backup),] 
+
+top_tweets$retweet_count <- as.numeric(as.character(top_tweets$retweet_count)) # The data table is all characters, so I need to convert the retweet count column into numbers
+top_tweets <- top_tweets[order(-top_tweets$retweet_count),]
+
+paged_table(head(top_tweets, 50))
+```
+
+# Section 10 - Analysis of top tweeters
+
+Top tweeters are reviewed to gain an understanding of the individuals or organisations that most contribute to the research reproducibility discourse. The results are shown in a table.
+
+```{r warning = FALSE}
+
+# The top tweeters data table is extracted from the full dataset
+topTweeters <- Twitter_data %>% select(screen_name) 
+
+# The number of occurrences of each top tweeters is counted
+topTweeters <- topTweeters %>% group_by(screen_name) %>% summarise(count=n()) 
+
+# The table is sorted
+topTweeters <- topTweeters[order(-topTweeters$count),] 
+
+paged_table(head(topTweeters, 50))
+```
+
+# Section 11 - Identification of accounts with the most followers in the sample
+
+The most popular individuals or organisations in the dataset are reviewed to understand the dynamics of social media discourse: who are the tweeters with the largest possible reach? The results are shown in a table.
+
+```{r warning = FALSE}
+
+# Select a list of unique accounts.
+highestFollowers <- Twitter_data %>% select(screen_name, followers_count, friends_count, description, location)
+highestFollowers_unique <- highestFollowers[!duplicated(highestFollowers$screen_name),] 
+
+# The data table is all characters, so relevant columns have to be converted into numbers.
+highestFollowers_unique$followers_count <- as.numeric(as.character(highestFollowers_unique$followers_count))
+highestFollowers_unique$friends_count <- as.numeric(as.character(highestFollowers_unique$friends_count))
+
+# Sort the table of stakeholders by number of followers and number of friends.
+stakeholder_highestFollowers <- highestFollowers_unique[order(-highestFollowers_unique$followers_count, -highestFollowers_unique$friends_count),]
+
+paged_table(head(stakeholder_highestFollowers,50))
+```
+
+# Section 12 - Analysis of the most commonly used words in the dataset
+
+Corpus analysis is used to analyse the words most commonly used in the dataset. The results are shown in a word cloud to gain an understanding of the language used when discussing reproducibility.
+
+```{r warning = FALSE}
+
+# The tweet's text is in the column called "text" in the data table called "Twitter_data".
+data_for_corpus <- Twitter_data %>% select(screen_name, text)
+
+# Build the corpus for analysis.
+corpus <- Corpus(VectorSource(data_for_corpus$text)) 
+
+# The corpus is cleaned and standardised.
+corpus <- tm_map(corpus, content_transformer(tolower))
+corpus <- tm_map(corpus, removeNumbers)
+corpus <- tm_map(corpus, stripWhitespace)
+corpus <- tm_map(corpus, removePunctuation)
+
+# Remove stop words by using a pre-defined list for the English language and additional words in quotes.
+mystopwords <- c(stopwords("english"),"rt","get","like","just","yes","know","will","good","day","people", "got", "can", "amp")
+corpus <- tm_map(corpus,removeWords,mystopwords)
+
+# Create a document term matrix.
+myDtm <- DocumentTermMatrix(corpus) 
+sparse <- removeSparseTerms(myDtm, 0.97)
+sparse <- as.data.frame(as.matrix(sparse))
+
+# Calculate the frequency of each word from the data table created - colSums adds up the totals by column.
+# freqWords is a row of numbers, which has the  words as the column headers.
+freqWords <- colSums(sparse)
+freqWords <- freqWords[order(-freqWords)]
+
+wordcloud(freq = as.vector(freqWords), words = names(freqWords),random.order = FALSE,
+          random.color = FALSE, colors = brewer.pal(9, 'Reds')[4:9])
+
+paged_table(head(as.data.frame(freqWords), 50))
+```
+
+# Section 13 - Retweet network analysis (full network)
+
+A graphic of the retweet networks is created as an html file. This shows relationships such as "who retweeted whom?". The analysis is presented as an interactive HTML file and includes all tweets in the dataset.
+
+```{r warning = FALSE, message=FALSE}
+
+# Select the appropriate columns.
+data_for_network <- Twitter_data[, c("screen_name", "retweet_screen_name", "text", "followers_count")]
+data_for_network$followers_count <- as.numeric(data_for_network$followers_count)
+
+# Potentially filter accounts that have a certain follower count, as the network is potentially very large. Comment the line below or delete it to show all accounts in your sample.
+# data_for_network <- data_for_network[data_for_network$followers_count>499, ]  
+
+# Get rid of rows with missing values.
+data_for_network_notBlank <- data_for_network[complete.cases(data_for_network), ] 
+
+# Build a list of nodes.
+whoTweeted <- data_for_network_notBlank$screen_name
+originalSource <- data_for_network_notBlank$retweet_screen_name
+nodes <- c(whoTweeted, originalSource)
+
+nodes <- as.data.frame(unique(nodes))
+nodes <- nodes %>% rowid_to_column("id")
+names(nodes)[2] <- "label"
+
+# Build a list of edges.
+retweet_network <- data_for_network_notBlank %>%  
+  group_by(screen_name, retweet_screen_name) %>%
+  summarise(weight = n()) %>% 
+  ungroup()
+
+names(retweet_network)[1] <- "Who retweeted"
+names(retweet_network)[2] <- "Original source"
+
+edges <- retweet_network %>% 
+  left_join(nodes, by = c("Original source" = "label")) %>% 
+  rename(from = id)
+
+edges <- edges %>% 
+  left_join(nodes, by = c("Who retweeted" = "label")) %>% 
+  rename(to = id)
+
+# Create the network.
+nodes_d3 <- mutate(nodes, id = id - 1)
+edges_d3 <- mutate(edges, from = from - 1, to = to - 1)
+nodes_d3 <- as.data.frame(nodes_d3) # This is needed to avoid the warning "Links is a tbl_df. Converting to a plain data frame."
+edges_d3 <- as.data.frame(edges_d3) 
+
+forceNetwork(Links = edges_d3, Nodes = nodes_d3, Source = "from", Target = "to", 
+             NodeID = "label", Group = "id", Value = "weight", 
+             opacity = 1, fontSize = 16, zoom = TRUE, arrows=TRUE)%>% 
+  htmlwidgets::prependContent(htmltools::tags$h3("Full retweet network")) 
+```
+
+# Section 14 - Retweet network analysis (most mentioned accounts)
+
+A graphic of the retweet networks is created as an html file. This shows relationships such as "who retweeted whom?". The analysis is presented as an interactive HTML file and includes tweets in the top 24 most mentioned accounts. This is arbitrary - the cutting point is accounts that have been mentioned at least 10 times in the dataset.
+
+```{r warning = FALSE, message=FALSE}
+
+top_accounts <- split_mentions_single_column_clean[1:24, 1] 
+counter <- 1:as.numeric(count(top_accounts))
+
+for (i in counter){
+  Twitter_data_counter <- Twitter_data[Twitter_data$retweet_screen_name == as.character(top_accounts[i,]),]
+  
+  if (i ==1){
+    tbl_chart <- Twitter_data_counter
+  }
+  if (i>1){
+    tbl_chart <- rbind(tbl_chart, Twitter_data_counter)
+  }
+}
+
+# Are any of the top mentioned accounts missing from tbl_chart? That's because they haven't been retweeted!
+data_for_network <- tbl_chart[, c("screen_name", "retweet_screen_name", "text", "followers_count")]
+data_for_network$followers_count <- as.numeric(data_for_network$followers_count)
+
+# Get rid of rows with missing values.
+data_for_network_notBlank <- data_for_network[complete.cases(data_for_network), ] 
+
+# Build a list of nodes.
+whoTweeted <- data_for_network_notBlank$screen_name
+originalSource <- data_for_network_notBlank$retweet_screen_name
+nodes <- c(whoTweeted, originalSource)
+
+nodes <- as.data.frame(unique(nodes))
+nodes <- nodes %>% rowid_to_column("id")
+names(nodes)[2] <- "label"
+
+# Build a list of edges.
+retweet_network <- data_for_network_notBlank %>%  
+  group_by(screen_name, retweet_screen_name) %>%
+  summarise(weight = n()) %>% 
+  ungroup()
+
+names(retweet_network)[1] <- "Who retweeted"
+names(retweet_network)[2] <- "Original source"
+
+edges <- retweet_network %>% 
+  left_join(nodes, by = c("Original source" = "label")) %>% 
+  rename(from = id)
+
+edges <- edges %>% 
+  left_join(nodes, by = c("Who retweeted" = "label")) %>% 
+  rename(to = id)
+
+# Create the network.
+nodes_d3 <- mutate(nodes, id = id - 1)
+edges_d3 <- mutate(edges, from = from - 1, to = to - 1)
+nodes_d3 <- as.data.frame(nodes_d3) # This is needed to avoid the warning "Links is a tbl_df. Converting to a plain data frame."
+edges_d3 <- as.data.frame(edges_d3) 
+
+forceNetwork(Links = edges_d3, Nodes = nodes_d3, Source = "from", Target = "to", 
+             NodeID = "label", Group = "id", Value = "weight", 
+             opacity = 1, fontSize = 16, zoom = TRUE, arrows=TRUE)%>% 
+  htmlwidgets::prependContent(htmltools::tags$h3("Filtered retweet network")) 
+```
