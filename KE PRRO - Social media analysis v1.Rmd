@@ -244,7 +244,7 @@ paged_table(head(top_urls, 50))
 
 # Section 9 - Analysis of most retweeted tweets
 
-The most retweeted tweets are reviewed to see if any key events or discussions should be reflected in the study. The results are shown in a table.
+The most retweeted tweets are reviewed to see if any key events or discussions should be reflected in the study. The results can be shown in a table - no output is shown here due to data privacy considerations.
 
 ```{r warning = FALSE}
 
@@ -259,7 +259,6 @@ top_tweets <- top_tweets[!duplicated(top_tweets$Original_Tweet_Backup),]
 top_tweets$retweet_count <- as.numeric(as.character(top_tweets$retweet_count)) # The data table is all characters, so I need to convert the retweet count column into numbers
 top_tweets <- top_tweets[order(-top_tweets$retweet_count),]
 
-paged_table(head(top_tweets, 50))
 ```
 
 # Section 10 - Analysis of top tweeters
@@ -297,7 +296,9 @@ highestFollowers_unique$friends_count <- as.numeric(as.character(highestFollower
 # Sort the table of stakeholders by number of followers and number of friends.
 stakeholder_highestFollowers <- highestFollowers_unique[order(-highestFollowers_unique$followers_count, -highestFollowers_unique$friends_count),]
 
-paged_table(head(stakeholder_highestFollowers,50))
+stakeholder_highestFollowers_table <- select(stakeholder_highestFollowers, screen_name, followers_count, friends_count)
+
+paged_table(head(stakeholder_highestFollowers_table,50))
 ```
 
 # Section 12 - Analysis of the most commonly used words in the dataset
